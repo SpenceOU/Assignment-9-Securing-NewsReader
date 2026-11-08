@@ -1,44 +1,78 @@
-import React, { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 
-// ⚠️ SECURITY ISSUE: This context is shared globally with no user authentication
-// All users see the same saved articles!
 const ArticlesContext = createContext();
 
 export function ArticlesProvider({ children }) {
-  const [savedArticles, setSavedArticles] = useState([]);
+  const { user } = useAuth();
 
+  // Saved articles are organized by username so each user has their own list:
+  // { spencer: [article, article], alex: [article] }
+  const [savedArticlesByUser, setSavedArticlesByUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('savedArticlesByUser');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Save to localStorage every time anyone's saved articles change
+  useEffect(() => {
+    localStorage.setItem('savedArticlesByUser', JSON.stringify(savedArticlesByUser));
+  }, [savedArticlesByUser]);
+
+  // The current user's saved articles (empty if nobody is logged in)
+  const getUserSavedArticles = () => {
+    if (!user) return [];
+    return savedArticlesByUser[user.username] || [];
+  };
+
+  // Every user's saved articles (used by the admin page)
+  const getAllUserArticles = () => savedArticlesByUser;
+
+  // Returns false if nobody is logged in so the card can send them to /login
   const saveArticle = (article) => {
-    setSavedArticles(prev => {
-      // Check if article is already saved
-      if (prev.find(a => a.url === article.url)) {
+    if (!user) return false;
+    setSavedArticlesByUser(prev => {
+      const userArticles = prev[user.username] || [];
+      if (userArticles.some(a => a.url === article.url)) {
         return prev;
       }
-      return [...prev, article];
+      return { ...prev, [user.username]: [...userArticles, article] };
     });
+    return true;
   };
 
   const removeArticle = (url) => {
-    setSavedArticles(prev => prev.filter(a => a.url !== url));
+    if (!user) return;
+    setSavedArticlesByUser(prev => ({
+      ...prev,
+      [user.username]: (prev[user.username] || []).filter(a => a.url !== url)
+    }));
   };
 
   const isArticleSaved = (url) => {
-    return savedArticles.some(a => a.url === url);
+    return getUserSavedArticles().some(a => a.url === url);
   };
 
   return (
-    <ArticlesContext.Provider 
-      value={{ 
-        savedArticles, 
-        saveArticle, 
-        removeArticle, 
-        isArticleSaved 
+    <ArticlesContext.Provider
+      value={{
+        savedArticlesByUser,
+        saveArticle,
+        removeArticle,
+        isArticleSaved,
+        getUserSavedArticles,
+        getAllUserArticles
       }}
     >
       {children}
     </ArticlesContext.Provider>
   );
-};
+}
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useArticles = () => {
   const context = useContext(ArticlesContext);
   if (!context) {

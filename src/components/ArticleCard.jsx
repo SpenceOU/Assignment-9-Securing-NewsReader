@@ -1,14 +1,20 @@
+import { useNavigate } from 'react-router-dom';
 import { useArticles } from '../context/ArticlesContext';
 
 function ArticleCard({ article }) {
   const { saveArticle, removeArticle, isArticleSaved } = useArticles();
+  const navigate = useNavigate();
   const saved = isArticleSaved(article.url);
 
   const handleBookmarkClick = () => {
     if (saved) {
       removeArticle(article.url);
     } else {
-      saveArticle(article);
+      // saveArticle returns false when nobody is logged in
+      const didSave = saveArticle(article);
+      if (!didSave) {
+        navigate('/login');
+      }
     }
   };
 
